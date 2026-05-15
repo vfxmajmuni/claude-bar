@@ -19,6 +19,35 @@
     .wrap {
       padding: 4px;
       -webkit-app-region: drag;
+      position: relative;
+    }
+
+    .resize-handle {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 14px;
+      height: 14px;
+      cursor: nwse-resize;
+      -webkit-app-region: no-drag;
+      z-index: 20;
+    }
+
+    .resize-handle::after {
+      content: '';
+      position: absolute;
+      bottom: 4px;
+      right: 4px;
+      width: 7px;
+      height: 7px;
+      border-right: 1.5px solid rgba(255, 255, 255, 0.3);
+      border-bottom: 1.5px solid rgba(255, 255, 255, 0.3);
+      border-radius: 0 0 2px 0;
+      transition: border-color .15s;
+    }
+
+    .resize-handle:hover::after {
+      border-color: rgba(255, 255, 255, 0.75);
     }
 
     .bar {
@@ -148,6 +177,19 @@
       color: #ef4444;
     }
 
+    .plan-label {
+      font-size: 7px;
+      color: #ffffff38;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 4px;
+      min-height: 0;
+    }
+
+    .plan-label:empty {
+      display: none;
+    }
+
     .bars {
       display: flex;
       flex-direction: column;
@@ -166,7 +208,7 @@
       color: #ffffff99;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      width: 42px;
+      width: 46px;
       flex-shrink: 0;
     }
 
@@ -244,6 +286,7 @@
 
 <body>
   <div class="wrap">
+    <div class="resize-handle" id="resizeHandle"></div>
     <div class="bar">
       <div class="close-btn" id="closeBtn"></div>
       <div class="top-row">
@@ -253,11 +296,12 @@
         </div>
         <div class="timer" id="timer">--:--</div>
       </div>
+      <div class="plan-label" id="planLabel"></div>
       <div class="bars" id="bars">
         <div class="no-data">Завантаження...</div>
       </div>
       <div class="footer">
-        <span class="updated" id="updated">оновлення кожні 30с</span>
+        <span class="updated" id="updated">оновлення кожні 2хв</span>
         <button class="login-btn" id="loginBtn">↗ логін</button>
       </div>
     </div>

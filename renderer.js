@@ -4,11 +4,13 @@ function colorClass(mins) {
   if (mins <= 45) return 'warn';
   return '';
 }
+
 function barColor(pct) {
   if (pct >= 90) return 'crit';
   if (pct >= 70) return 'warn';
   return '';
 }
+
 function fmt(mins) {
   if (mins === null || mins === undefined) return '--:--';
   if (mins <= 0) return '0:00';
@@ -16,6 +18,7 @@ function fmt(mins) {
   const m = Math.round(mins % 60);
   return h > 0 ? `${h}:${String(m).padStart(2,'0')}` : `0:${String(m).padStart(2,'0')}`;
 }
+
 function timeAgo(ts) {
   if (!ts) return '—';
   const s = Math.round((Date.now() - ts) / 1000);
@@ -23,46 +26,74 @@ function timeAgo(ts) {
   return `оновлено ${Math.round(s/60)}хв тому`;
 }
 
+function fmtDuration(ms) {
+  const totalMin = Math.round(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h >= 24) return `${Math.floor(h / 24)}d ${h % 24}h`;
+  if (h > 0) return `${h}h ${m}min`;
+  return `${m}min`;
+}
+
 let lastTs = null;
 
 function render(data) {
-  const dot     = document.getElementById('dot');
-  const timer   = document.getElementById('timer');
-  const bars    = document.getElementById('bars');
-  const updated = document.getElementById('updated');
-
+  const dot      = document.getElementById('dot');
+  const timer    = document.getElementById('timer');
+  const barsEl   = document.getElementById('bars');
+  const updated  = document.getElementById('updated');
   const loginBtn = document.getElementById('loginBtn');
-  if (!data || !data.found) {
-    lastTs = null;
-    dot.className = 'dot load';
+
+  const planLabel = document.getElementById('planLabel');
+
+  if (!data || !data.bars || data.bars.length === 0) {
     timer.textContent = '--:--';
     timer.className = 'timer';
-    bars.innerHTML = '<div class="no-data">Чекаємо дані...</div>';
-    updated.textContent = 'оновлення кожні 30с';
-    loginBtn.textContent = '↗ логін';
+    if (planLabel) planLabel.textContent = data?.planName || '';
+
+    if (data?.noUsagePage) {
+      lastTs = data.fetchedAt;
+      dot.className = 'dot';
+      barsEl.innerHTML = '<div class="no-data">Ліміти на цьому<br>плані відсутні</div>';
+      updated.textContent = '';
+      loginBtn.textContent = '↗ вийти';
+    } else {
+      lastTs = null;
+      dot.className = 'dot load';
+      barsEl.innerHTML = '<div class="no-data">Чекаємо дані...</div>';
+      updated.textContent = 'оновлення кожні 2хв';
+      loginBtn.textContent = '↗ логін';
+    }
     return;
   }
+
   loginBtn.textContent = '↗ вийти';
+  lastTs = data.fetchedAt;
 
-  lastTs = data.timestamp;
-  const tc = colorClass(data.resetMinutes);
+  const sessionBar = data.bars.find(b => b.key === 'five_hour') || data.bars[0];
+  const resetMins = sessionBar && sessionBar.msUntilReset !== null
+    ? Math.round(sessionBar.msUntilReset / 60000)
+    : null;
+
+  const tc = colorClass(resetMins);
   dot.className = 'dot' + (tc ? ' ' + tc : ' ok');
-  timer.textContent = fmt(data.resetMinutes);
+  timer.textContent = fmt(resetMins);
   timer.className = 'timer' + (tc ? ' ' + tc : '');
-  updated.textContent = timeAgo(data.timestamp);
+  updated.textContent = timeAgo(data.fetchedAt);
+  if (planLabel) planLabel.textContent = data.planName || '';
 
-  const rows = [
-    { name: 'Сесія',   pct: data.percent },
-    { name: 'Тиждень', pct: data.weeklyPercent },
-    { name: 'Design',  pct: data.designPercent },
-  ].filter(r => r.pct !== null && r.pct !== undefined);
-
-  bars.innerHTML = rows.map(r => `
-    <div class="bar-row">
-      <span class="bar-name">${r.name}</span>
-      <div class="track"><div class="fill ${barColor(r.pct)}" style="width:${r.pct}%"></div></div>
-      <span class="pct">${r.pct}%</span>
-    </div>`).join('');
+  barsEl.innerHTML = data.bars.map(bar => {
+    const cls = barColor(bar.utilization);
+    const tooltip = bar.msUntilReset
+      ? `${bar.label} — resets in ${fmtDuration(bar.msUntilReset)}`
+      : bar.label;
+    return `
+      <div class="bar-row" title="${tooltip}">
+        <span class="bar-name">${bar.shortLabel}</span>
+        <div class="track"><div class="fill ${cls}" style="width:${bar.utilization}%"></div></div>
+        <span class="pct">${bar.utilization}%</span>
+      </div>`;
+  }).join('');
 }
 
 window.claudeBar.onUpdate((data) => render(data));
@@ -73,3 +104,39 @@ document.getElementById('loginBtn').addEventListener('click', () => window.claud
 setInterval(() => {
   if (lastTs) document.getElementById('updated').textContent = timeAgo(lastTs);
 }, 60000);
+
+const BASE_W  = 224;
+const BASE_H  = 150;
+const ASPECT  = BASE_W / BASE_H;
+
+function applyScale() {
+  document.body.style.zoom = window.innerWidth / BASE_W;
+}
+window.addEventListener('resize', applyScale);
+applyScale();
+
+(function () {
+  const handle = document.getElementById('resizeHandle');
+  let active = false, ox, ow;
+
+  handle.addEventListener('mousedown', e => {
+    e.preventDefault();
+    active = true;
+    ox = e.screenX;
+    ow = window.innerWidth;
+
+    function onMove(e) {
+      if (!active) return;
+      const newW = Math.max(180, Math.min(500, ow + e.screenX - ox));
+      document.body.style.zoom = newW / BASE_W;
+      window.claudeBar.resize(newW, Math.round(newW / ASPECT));
+    }
+    function onUp() {
+      active = false;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+})();

@@ -1,26 +1,73 @@
-# 🤖 Claude Bar
+# Claude Bar
 
-An elegant, transparent floating widget for macOS that automatically tracks and displays your Claude.ai usage limits in real-time. 
+A transparent floating widget for macOS that tracks your Claude.ai usage limits in real-time.
 
-## ✨ Features
-- **Always on top:** A sleek, borderless, semi-transparent widget that seamlessly integrates with macOS.
-- **Auto-polling:** Automatically syncs your Claude session limit data every 30 seconds.
-- **Smart Color Indicators:** Colors transition from green (ok) to yellow (warning) and a blinking red (critical) when you have less than 15 minutes left.
-- **Session Persistence:** Remembers your Claude authentication. You only need to log in once!
+![Claude Bar screenshot](https://github.com/vfxmajmuni/claude-bar/assets/screenshot.png)
 
-## 🚀 How it works under the hood
-The app runs on **Electron** and is split into two windows:
-1. **The Widget (`floatWin`):** The visible UI written in Vanilla HTML/CSS/JS. It stays always on top and displays the current usage.
-2. **The Scraper (`scraperWin`):** A hidden window that securely navigates to your `claude.ai/settings/usage` page, handles SPA (Single Page Application) navigation quirks, and programmatically reads the usage progress bars without requiring any API keys. 
+## Features
 
-Authentication cookies are saved locally (`claude-cookies.json`) so your session persists even after restarting the app.
+- **Always on top** — borderless, semi-transparent widget that stays above all windows
+- **Real-time usage bars** — session, weekly, and per-model limits with color coding
+- **Plan detection** — automatically reads your plan (Free, Pro, Max, Team, Enterprise) from the API
+- **Smart colors** — green → yellow → blinking red as limits approach
+- **Resizable** — drag the bottom-right corner to scale the widget up or down proportionally
+- **Session persistence** — logs in once, remembers your session across restarts
+- **Auto-polling** — syncs data every 2 minutes
 
-## 📦 Installation for Users
-Download the latest `.dmg` installer from the Releases tab, open it, and drag "Claude Bar" to your Applications folder.
-*Note: Upon the first launch, right-click the app and select "Open" to bypass the macOS unidentified developer warning.*
+## Installation
 
-## 💻 Development
-To run this project locally:
+Download the latest `.dmg` from the [Releases](https://github.com/vfxmajmuni/claude-bar/releases) tab, open it, and drag **Claude Bar** to Applications.
+
+> First launch: right-click the app → **Open** to bypass the macOS Gatekeeper warning (ad-hoc signed build).
+
+## How it works
+
+Two Electron windows:
+
+| Window | Role |
+|--------|------|
+| `floatWin` | Visible widget — transparent, always on top, 224×150px default |
+| `scraperWin` | Hidden browser — authenticated Claude.ai session |
+
+**Data flow:**
+
+```
+scraperWin preload
+  → fetch /api/organizations        → org UUID + capabilities[] → plan name
+  → fetch /api/organizations/{id}/usage → usage limits as JSON
+  → ipcRenderer.send('usage:update', data)
+  → ipcMain → floatWin.webContents.send('usage-update')
+  → renderer.js → render()
+```
+
+**Plan detection** reads `org.capabilities[]` from the organizations API — the field that actually reflects the subscription (`claude_pro`, `claude_max`, etc.), not `rate_limit_tier` which is a technical rate-limit category.
+
+**Cookie persistence** — cookies are saved manually to `{userData}/claude-cookies.json` after each successful fetch and restored on startup. No LevelDB / `persist:` partition used, which avoids lock conflicts on quick restarts.
+
+## Color coding
+
+| State | Condition |
+|-------|-----------|
+| 🔴 Critical (blinking) | < 15 min remaining or ≥ 90% used |
+| 🟡 Warning | ≤ 45 min remaining or ≥ 70% used |
+| 🟢 OK | everything else |
+
+## Development
+
 ```bash
 npm install
 npm start
+```
+
+Build DMG:
+
+```bash
+npm run dist
+```
+
+## Architecture notes
+
+- Polling interval: **2 minutes** (in `preload-scraper.js`)
+- Scraper session: **in-memory partition** (`scraper-temp`, no `persist:` prefix) — avoids LevelDB lock errors on rapid restarts
+- Usage bars are rendered dynamically from any JSON field with a `utilization` number — new Claude model limits appear automatically without code changes
+- Resize: dragging the corner updates `body.style.zoom` synchronously on every `mousemove` before the IPC call completes, so content and window frame scale together without lag
