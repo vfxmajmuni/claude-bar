@@ -2,7 +2,7 @@
 
 A transparent floating widget for macOS that tracks your Claude.ai usage limits in real-time.
 
-![Claude Bar screenshot](https://github.com/vfxmajmuni/claude-bar/assets/screenshot.png)
+![Claude Bar](claude-bar.png)
 
 ## Features
 
